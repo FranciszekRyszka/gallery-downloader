@@ -1,0 +1,14 @@
+# Claude Code local settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Project runtime data
+logs/
+downloads/
+*.sqlite
+*.db
