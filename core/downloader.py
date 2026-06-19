@@ -70,11 +70,16 @@ async def download_images(
     retries: int = 3,
     timeout: float = 60.0,
     on_progress: ProgressCallback | None = None,
+    pause_event: asyncio.Event | None = None,
 ) -> list[DownloadResult]:
     """Download ``urls`` into ``dest_dir`` concurrently.
 
     Returns one :class:`DownloadResult` per URL. Already-downloaded files are
     skipped (resume), and each download is retried up to ``retries`` times.
+
+    If ``pause_event`` is given, a worker waits on it before starting each
+    download. Clear the event to pause (in-flight downloads still finish, new
+    ones are held back); set it to resume. A ``None`` event never pauses.
     """
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
@@ -87,6 +92,10 @@ async def download_images(
     ) as client:
 
         async def worker(u: str) -> None:
+            # Gate before taking a semaphore slot so paused workers don't
+            # occupy concurrency while idle.
+            if pause_event is not None:
+                await pause_event.wait()
             async with semaphore:
                 result = await _download_one(client, u, dest, retries=retries)
             results.append(result)

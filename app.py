@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from textual import work
@@ -43,6 +44,7 @@ class GalleryDownloaderApp(App):
         self.history = History()
         self._done = 0
         self._failed = 0
+        self._pause_event: asyncio.Event | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -51,6 +53,7 @@ class GalleryDownloaderApp(App):
                 yield Input(placeholder="Gallery URL…", id="url")
                 yield Button("Preview", id="preview", variant="primary")
                 yield Button("Download", id="download", disabled=True)
+                yield Button("Pause", id="pause", disabled=True)
             yield Label("Enter a gallery URL to begin.", id="meta")
             yield ProgressBar(id="progress", total=100, show_eta=False)
             yield RichLog(id="log", highlight=True, markup=True)
@@ -72,6 +75,22 @@ class GalleryDownloaderApp(App):
         elif event.button.id == "download":
             if self.gallery:
                 self.download(self.gallery)
+        elif event.button.id == "pause":
+            self._toggle_pause(event.button)
+
+    def _toggle_pause(self, button: Button) -> None:
+        if self._pause_event is None:
+            return
+        if self._pause_event.is_set():
+            self._pause_event.clear()
+            button.label = "Resume"
+            button.variant = "warning"
+            self._log("[yellow]Paused.[/yellow] Finishing in-flight downloads…")
+        else:
+            self._pause_event.set()
+            button.label = "Pause"
+            button.variant = "default"
+            self._log("[green]Resumed.[/green]")
 
     @work(exclusive=True, thread=True)
     def preview(self, url: str) -> None:
@@ -100,6 +119,14 @@ class GalleryDownloaderApp(App):
         progress.update(total=gallery.count, progress=0)
         self.query_one("#download", Button).disabled = True
 
+        # Pause gate: set = running. Enable the pause button for this run.
+        self._pause_event = asyncio.Event()
+        self._pause_event.set()
+        pause_button = self.query_one("#pause", Button)
+        pause_button.disabled = False
+        pause_button.label = "Pause"
+        pause_button.variant = "default"
+
         gallery_id = self.history.record_start(
             gallery.url, gallery.title, str(dest), gallery.count
         )
@@ -119,9 +146,19 @@ class GalleryDownloaderApp(App):
                 )
             progress.advance(1)
 
-        results = await download_images(
-            gallery.image_urls, dest, on_progress=on_progress
-        )
+        try:
+            results = await download_images(
+                gallery.image_urls,
+                dest,
+                on_progress=on_progress,
+                pause_event=self._pause_event,
+            )
+        finally:
+            pause_button.disabled = True
+            pause_button.label = "Pause"
+            pause_button.variant = "default"
+            self._pause_event = None
+
         self.history.update_progress(
             gallery_id, downloaded=self._done, failed=self._failed
         )
