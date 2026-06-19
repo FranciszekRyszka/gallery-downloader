@@ -1,6 +1,9 @@
 # Claude Code local settings
 .claude/settings.local.json
 
+# Crash / debug logs
+error.txt
+
 # Python
 __pycache__/
 *.py[cod]

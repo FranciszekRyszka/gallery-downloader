@@ -57,9 +57,11 @@ def _extract_title(soup: BeautifulSoup) -> str:
 def _extract_image_urls(soup: BeautifulSoup, base_url: str) -> list[str]:
     """Collect full-size image URLs from the gallery.
 
-    PornPics wraps each thumbnail in an ``<a>`` that links to the full-size
-    image. We prefer those anchor hrefs and fall back to ``<img src>``.
-    Adjust the selectors here if the site markup changes.
+    PornPics renders each gallery image as an ``<a class="rel-link">`` that
+    links straight to the full-resolution file on its CDN
+    (``cdni.pornpics.com``). We target those anchors first to avoid picking up
+    site chrome, ads and related-gallery thumbnails, then fall back to generic
+    anchors and finally to ``<img>`` sources for other sites / markup changes.
     """
     urls: list[str] = []
     seen: set[str] = set()
@@ -74,11 +76,16 @@ def _extract_image_urls(soup: BeautifulSoup, base_url: str) -> list[str]:
             seen.add(absolute)
             urls.append(absolute)
 
-    # Anchors that point straight at an image file (full resolution).
-    for a in soup.find_all("a", href=True):
+    # 1. PornPics: full-size images are anchors with class "rel-link".
+    for a in soup.select("a.rel-link[href]"):
         add(a["href"])
 
-    # Fallback: any image tags on the page.
+    # 2. Fallback: any anchor pointing straight at an image file.
+    if not urls:
+        for a in soup.find_all("a", href=True):
+            add(a["href"])
+
+    # 3. Last resort: image tags (handles lazy-loaded data-src).
     if not urls:
         for img in soup.find_all("img"):
             add(img.get("data-src") or img.get("src"))

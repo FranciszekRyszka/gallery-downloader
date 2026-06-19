@@ -105,15 +105,19 @@ class GalleryDownloaderApp(App):
         )
         self._log(f"Downloading to [cyan]{dest}[/cyan] …")
 
+        # This worker runs on the app's event-loop thread, and the
+        # download_images coroutine calls on_progress from that same thread,
+        # so we update widgets directly (call_from_thread is only valid from
+        # a *different* thread).
         def on_progress(result: DownloadResult) -> None:
             if result.ok:
                 self._done += 1
             else:
                 self._failed += 1
-                self.call_from_thread(
-                    self._log, f"[red]Failed:[/red] {result.url} ({result.error})"
+                self._log(
+                    f"[red]Failed:[/red] {result.url} ({result.error})"
                 )
-            self.call_from_thread(progress.advance, 1)
+            progress.advance(1)
 
         results = await download_images(
             gallery.image_urls, dest, on_progress=on_progress
