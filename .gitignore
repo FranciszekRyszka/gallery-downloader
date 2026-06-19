@@ -7,8 +7,10 @@ __pycache__/
 .venv/
 venv/
 
-# Project runtime data
-logs/
-downloads/
+# Project runtime data (keep the folders, ignore their contents)
+logs/*
+downloads/*
+!logs/.gitkeep
+!downloads/.gitkeep
 *.sqlite
 *.db
