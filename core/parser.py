@@ -6,7 +6,9 @@ image URLs.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urljoin
 
 import httpx
@@ -100,3 +102,22 @@ def parse_gallery(url: str, *, timeout: float = 30.0) -> Gallery:
     title = _extract_title(soup)
     image_urls = _extract_image_urls(soup, url)
     return Gallery(url=url, title=title, image_urls=image_urls)
+
+
+def read_url_list(path: str | os.PathLike[str]) -> list[str]:
+    """Read gallery URLs from a text file, one URL per line.
+
+    Blank lines and lines starting with ``#`` (comments) are ignored, and
+    duplicate URLs are dropped while preserving order. Raises ``OSError`` if
+    the file cannot be read.
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line not in seen:
+            seen.add(line)
+            urls.append(line)
+    return urls
