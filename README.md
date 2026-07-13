@@ -8,7 +8,9 @@ downloading all images from a gallery page on CornPics.
 - Async downloads with retry, concurrency and **pause / resume**
 - **Batch mode**: download many galleries from a list file (one URL per line)
 - **Actress / model mode**: paste a model page URL to count *all* their
-  galleries, then download every one (or just the first N)
+  galleries, then download every one (or just the first N) — saved into a
+  folder named after the model
+- **Choose the download folder** (defaults to `downloads/`)
 - Optional **delay between photos** to rate-limit downloads
 - Skips files already on disk (resume across restarts)
 - Keeps a SQLite history of downloaded galleries
@@ -38,7 +40,7 @@ python main.py
 1. Paste a gallery URL into the input box.
 2. Press **Preview** to fetch the title and image count.
 3. Press **Download** to start. Images are saved to
-   `downloads/<gallery title>/`.
+   `<download folder>/<gallery title>/` (see **Options** below).
 4. Press **Pause** to hold back new downloads (in-flight ones finish);
    press **Resume** to continue. Press **q** to quit.
 
@@ -65,10 +67,14 @@ python main.py
 2. Press **Count Galleries**. The app pages through the site's listing API
    and reports the total (e.g. *"Riley Reid: 1733 galleries"*).
 3. Press **Download All** to fetch every gallery, using the same sequential
-   batch engine (progress, skip-on-parse-error, pause/resume all apply).
+   batch engine (progress, skip-on-parse-error, pause/resume all apply). The
+   galleries are saved into `<download folder>/<model name>/<gallery title>/`.
 
-**Options** (fourth row, apply to whichever download you start):
+**Options** (apply to whichever download you start):
 
+- **Download folder** — where files are saved. Single galleries and lists go
+  into `<folder>/<gallery title>/`; model downloads add a `<model name>/`
+  level. Leave blank to use the app's `downloads/` directory. `~` is expanded.
 - **First N galleries** — in model mode, download only the first *N* galleries
   instead of all of them. Leave blank for all.
 - **Delay between photos** — seconds to wait between each image request

@@ -37,10 +37,10 @@ class GalleryDownloaderApp(App):
 
     TITLE = "Gallery Downloader"
     CSS = """
-    #url_row, #list_row, #model_row, #opts_row {
+    #url_row, #list_row, #model_row, #dest_row, #opts_row {
         height: auto; padding: 1 0 0 0;
     }
-    #url, #list_file, #model_url { width: 1fr; }
+    #url, #list_file, #model_url, #dest { width: 1fr; }
     #model_limit, #delay { width: 24; }
     #meta { padding: 1 0; color: $text-muted; }
     ProgressBar { margin: 1 0; }
@@ -76,6 +76,11 @@ class GalleryDownloaderApp(App):
                 )
                 yield Button("Count Galleries", id="count_model")
                 yield Button("Download All", id="download_model", disabled=True)
+            with Horizontal(id="dest_row"):
+                yield Input(
+                    placeholder=f"Download folder (blank = {DOWNLOADS_DIR})",
+                    id="dest",
+                )
             with Horizontal(id="opts_row"):
                 yield Input(
                     placeholder="First N galleries (blank = all)",
@@ -97,6 +102,11 @@ class GalleryDownloaderApp(App):
 
     def _log(self, message: str) -> None:
         self.query_one("#log", RichLog).write(message)
+
+    def _get_dest_root(self) -> Path:
+        """Base download folder from the input (default DOWNLOADS_DIR)."""
+        raw = self.query_one("#dest", Input).value.strip()
+        return Path(raw).expanduser() if raw else DOWNLOADS_DIR
 
     def _get_delay(self) -> float:
         """Seconds between photos, from the delay input (0 if blank/invalid)."""
@@ -209,12 +219,15 @@ class GalleryDownloaderApp(App):
         has_model = self.model_page is not None and self.model_page.count > 0
         self.query_one("#download_model", Button).disabled = not has_model
 
-    async def _download_gallery(self, gallery: Gallery) -> tuple[int, int]:
-        """Download one gallery, update history, return (downloaded, failed).
+    async def _download_gallery(
+        self, gallery: Gallery, base_dir: Path
+    ) -> tuple[int, int]:
+        """Download one gallery into ``base_dir/<title>/``.
 
-        Assumes a run is active (``self._pause_event`` set up by the caller).
+        Updates history and returns (downloaded, failed). Assumes a run is
+        active (``self._pause_event`` set up by the caller).
         """
-        dest = DOWNLOADS_DIR / _safe_name(gallery.title)
+        dest = base_dir / _safe_name(gallery.title)
         done = 0
         failed = 0
         progress = self.query_one("#progress", ProgressBar)
@@ -259,16 +272,19 @@ class GalleryDownloaderApp(App):
     async def download(self, gallery: Gallery) -> None:
         self._begin_run()
         try:
-            done, failed = await self._download_gallery(gallery)
+            done, failed = await self._download_gallery(
+                gallery, self._get_dest_root()
+            )
         finally:
             self._end_run()
         self._log(f"[green]Done.[/green] {done} downloaded, {failed} failed.")
 
-    async def _run_batch(self, urls: list[str]) -> None:
+    async def _run_batch(self, urls: list[str], base_dir: Path) -> None:
         """Download a list of gallery URLs in sequence (assumes a run began).
 
-        Each URL is parsed off-thread and downloaded; a URL that fails to
-        parse is logged and skipped so it never aborts the batch.
+        Each gallery lands in ``base_dir/<title>/``. A URL is parsed off-thread
+        and downloaded; a URL that fails to parse is logged and skipped so it
+        never aborts the batch.
         """
         total_done = 0
         total_failed = 0
@@ -280,7 +296,7 @@ class GalleryDownloaderApp(App):
             except Exception as exc:  # noqa: BLE001 - surface & continue
                 self._log(f"[red]Parse failed:[/red] {url} ({exc})")
                 continue
-            done, failed = await self._download_gallery(gallery)
+            done, failed = await self._download_gallery(gallery, base_dir)
             total_done += done
             total_failed += failed
         self._log(
@@ -303,7 +319,7 @@ class GalleryDownloaderApp(App):
         )
         self._begin_run()
         try:
-            await self._run_batch(urls)
+            await self._run_batch(urls, self._get_dest_root())
         finally:
             self._end_run()
 
@@ -347,9 +363,12 @@ class GalleryDownloaderApp(App):
                 f"Downloading all [green]{len(urls)}[/green] galleries "
                 f"for [b]{model.name}[/b] …"
             )
+        # Galleries of a model go into a folder named after the model.
+        base_dir = self._get_dest_root() / _safe_name(model.name)
+        self._log(f"Saving into [cyan]{base_dir}[/cyan]")
         self._begin_run()
         try:
-            await self._run_batch(urls)
+            await self._run_batch(urls, base_dir)
         finally:
             self._end_run()
 
