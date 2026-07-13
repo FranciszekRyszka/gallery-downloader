@@ -8,7 +8,8 @@ downloading all images from a gallery page on CornPics.
 - Async downloads with retry, concurrency and **pause / resume**
 - **Batch mode**: download many galleries from a list file (one URL per line)
 - **Actress / model mode**: paste a model page URL to count *all* their
-  galleries, then download every one
+  galleries, then download every one (or just the first N)
+- Optional **delay between photos** to rate-limit downloads
 - Skips files already on disk (resume across restarts)
 - Keeps a SQLite history of downloaded galleries
 
@@ -66,6 +67,14 @@ python main.py
 3. Press **Download All** to fetch every gallery, using the same sequential
    batch engine (progress, skip-on-parse-error, pause/resume all apply).
 
+**Options** (fourth row, apply to whichever download you start):
+
+- **First N galleries** — in model mode, download only the first *N* galleries
+  instead of all of them. Leave blank for all.
+- **Delay between photos** — seconds to wait between each image request
+  (a global rate limit, enforced across concurrent downloads). Leave blank or
+  `0` for no delay. Useful to avoid hammering the server.
+
 ## Project structure
 
 ```text
@@ -92,7 +101,8 @@ gallery_downloader/
 2. **Download** — `core.downloader.download_images(...)` fetches images
    concurrently with a semaphore, retries with backoff, and writes via a
    `.part` temp file. Existing non-empty files are skipped (resume). An
-   optional `asyncio.Event` gate provides pause/resume.
+   optional `asyncio.Event` gate provides pause/resume, and a `delay`
+   parameter spaces out request starts as a global rate limit.
 3. **History** — `db.history.History` records each gallery (title, dest,
    counts, status) in `logs/history.db`.
 

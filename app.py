@@ -37,8 +37,11 @@ class GalleryDownloaderApp(App):
 
     TITLE = "Gallery Downloader"
     CSS = """
-    #url_row, #list_row, #model_row { height: auto; padding: 1 0 0 0; }
+    #url_row, #list_row, #model_row, #opts_row {
+        height: auto; padding: 1 0 0 0;
+    }
     #url, #list_file, #model_url { width: 1fr; }
+    #model_limit, #delay { width: 24; }
     #meta { padding: 1 0; color: $text-muted; }
     ProgressBar { margin: 1 0; }
     RichLog { height: 1fr; border: round $primary; }
@@ -73,6 +76,17 @@ class GalleryDownloaderApp(App):
                 )
                 yield Button("Count Galleries", id="count_model")
                 yield Button("Download All", id="download_model", disabled=True)
+            with Horizontal(id="opts_row"):
+                yield Input(
+                    placeholder="First N galleries (blank = all)",
+                    id="model_limit",
+                    type="integer",
+                )
+                yield Input(
+                    placeholder="Delay between photos, s (e.g. 0.5)",
+                    id="delay",
+                    type="number",
+                )
             yield Label("Enter a gallery URL to begin.", id="meta")
             yield ProgressBar(id="progress", total=100, show_eta=False)
             yield RichLog(id="log", highlight=True, markup=True)
@@ -83,6 +97,23 @@ class GalleryDownloaderApp(App):
 
     def _log(self, message: str) -> None:
         self.query_one("#log", RichLog).write(message)
+
+    def _get_delay(self) -> float:
+        """Seconds between photos, from the delay input (0 if blank/invalid)."""
+        raw = self.query_one("#delay", Input).value.strip()
+        try:
+            return max(0.0, float(raw)) if raw else 0.0
+        except ValueError:
+            return 0.0
+
+    def _get_model_limit(self) -> int | None:
+        """First-N-galleries cap from the input (None if blank/invalid/<=0)."""
+        raw = self.query_one("#model_limit", Input).value.strip()
+        try:
+            n = int(raw)
+        except ValueError:
+            return None
+        return n if n > 0 else None
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "preview":
@@ -215,6 +246,7 @@ class GalleryDownloaderApp(App):
             dest,
             on_progress=on_progress,
             pause_event=self._pause_event,
+            delay=self._get_delay(),
         )
         self.history.update_progress(gallery_id, downloaded=done, failed=failed)
         self.history.record_finish(
@@ -302,13 +334,22 @@ class GalleryDownloaderApp(App):
 
     @work(exclusive=True)
     async def download_model(self, model: ModelPage) -> None:
-        self._log(
-            f"Downloading all [green]{model.count}[/green] galleries "
-            f"for [b]{model.name}[/b] …"
-        )
+        limit = self._get_model_limit()
+        urls = model.gallery_urls
+        if limit is not None and limit < len(urls):
+            urls = urls[:limit]
+            self._log(
+                f"Downloading the first [green]{len(urls)}[/green] of "
+                f"{model.count} galleries for [b]{model.name}[/b] …"
+            )
+        else:
+            self._log(
+                f"Downloading all [green]{len(urls)}[/green] galleries "
+                f"for [b]{model.name}[/b] …"
+            )
         self._begin_run()
         try:
-            await self._run_batch(model.gallery_urls)
+            await self._run_batch(urls)
         finally:
             self._end_run()
 

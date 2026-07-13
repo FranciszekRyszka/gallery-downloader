@@ -14,6 +14,7 @@ import httpx
 from .parser import DEFAULT_HEADERS
 
 ProgressCallback = Callable[["DownloadResult"], Awaitable[None] | None]
+Throttle = Callable[[], Awaitable[None]]
 
 
 @dataclass
@@ -38,16 +39,20 @@ async def _download_one(
     dest_dir: Path,
     *,
     retries: int,
+    throttle: Throttle | None = None,
 ) -> DownloadResult:
     target = dest_dir / _filename_for(url)
 
-    # Resume support: skip files that already exist with content.
+    # Resume support: skip files that already exist with content. Skipped
+    # files make no request, so they are not subject to the throttle.
     if target.exists() and target.stat().st_size > 0:
         return DownloadResult(url=url, path=target, ok=True, skipped=True)
 
     last_error: str | None = None
     for attempt in range(1, retries + 1):
         try:
+            if throttle is not None:
+                await throttle()
             resp = await client.get(url)
             resp.raise_for_status()
             tmp = target.with_suffix(target.suffix + ".part")
@@ -71,6 +76,7 @@ async def download_images(
     timeout: float = 60.0,
     on_progress: ProgressCallback | None = None,
     pause_event: asyncio.Event | None = None,
+    delay: float = 0.0,
 ) -> list[DownloadResult]:
     """Download ``urls`` into ``dest_dir`` concurrently.
 
@@ -80,12 +86,34 @@ async def download_images(
     If ``pause_event`` is given, a worker waits on it before starting each
     download. Clear the event to pause (in-flight downloads still finish, new
     ones are held back); set it to resume. A ``None`` event never pauses.
+
+    ``delay`` sets a minimum number of seconds between the *start* of each
+    image request across all workers (a global rate limit). With ``delay`` <=
+    0 requests are not throttled. Skipped (already-downloaded) files make no
+    request and do not consume a delay slot.
     """
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
 
     semaphore = asyncio.Semaphore(concurrency)
     results: list[DownloadResult] = []
+
+    # Global rate limiter: serialize request starts to `delay` apart. Holding
+    # the lock across the sleep keeps other workers queued so spacing holds
+    # regardless of concurrency.
+    loop = asyncio.get_event_loop()
+    rate_lock = asyncio.Lock()
+    next_allowed = 0.0
+
+    async def throttle() -> None:
+        nonlocal next_allowed
+        if delay <= 0:
+            return
+        async with rate_lock:
+            wait = next_allowed - loop.time()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            next_allowed = loop.time() + delay
 
     async with httpx.AsyncClient(
         headers=DEFAULT_HEADERS, timeout=timeout, follow_redirects=True
@@ -97,7 +125,9 @@ async def download_images(
             if pause_event is not None:
                 await pause_event.wait()
             async with semaphore:
-                result = await _download_one(client, u, dest, retries=retries)
+                result = await _download_one(
+                    client, u, dest, retries=retries, throttle=throttle
+                )
             results.append(result)
             if on_progress is not None:
                 outcome = on_progress(result)
