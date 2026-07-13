@@ -19,7 +19,14 @@ from textual.widgets import (
 )
 
 from core.downloader import DownloadResult, download_images
-from core.parser import Gallery, parse_gallery, read_url_list
+from core.parser import (
+    Gallery,
+    ModelPage,
+    fetch_model_galleries,
+    is_listing_url,
+    parse_gallery,
+    read_url_list,
+)
 from db.history import History
 
 DOWNLOADS_DIR = Path(__file__).resolve().parent / "downloads"
@@ -30,8 +37,8 @@ class GalleryDownloaderApp(App):
 
     TITLE = "Gallery Downloader"
     CSS = """
-    #url_row, #list_row { height: auto; padding: 1 0 0 0; }
-    #url, #list_file { width: 1fr; }
+    #url_row, #list_row, #model_row { height: auto; padding: 1 0 0 0; }
+    #url, #list_file, #model_url { width: 1fr; }
     #meta { padding: 1 0; color: $text-muted; }
     ProgressBar { margin: 1 0; }
     RichLog { height: 1fr; border: round $primary; }
@@ -41,6 +48,7 @@ class GalleryDownloaderApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.gallery: Gallery | None = None
+        self.model_page: ModelPage | None = None
         self.history = History()
         self._pause_event: asyncio.Event | None = None
 
@@ -58,6 +66,13 @@ class GalleryDownloaderApp(App):
                     id="list_file",
                 )
                 yield Button("Download List", id="download_list")
+            with Horizontal(id="model_row"):
+                yield Input(
+                    placeholder="…or an actress / model page URL",
+                    id="model_url",
+                )
+                yield Button("Count Galleries", id="count_model")
+                yield Button("Download All", id="download_model", disabled=True)
             yield Label("Enter a gallery URL to begin.", id="meta")
             yield ProgressBar(id="progress", total=100, show_eta=False)
             yield RichLog(id="log", highlight=True, markup=True)
@@ -85,6 +100,21 @@ class GalleryDownloaderApp(App):
                 self._log("[red]Please enter a path to a URL list file.[/red]")
                 return
             self.download_list(path)
+        elif event.button.id == "count_model":
+            url = self.query_one("#model_url", Input).value.strip()
+            if not url:
+                self._log("[red]Please enter an actress / model page URL.[/red]")
+                return
+            if not is_listing_url(url):
+                self._log(
+                    "[red]That doesn't look like a model page[/red] "
+                    "(expected e.g. …/pornstars/<name>/)."
+                )
+                return
+            self.count_model(url)
+        elif event.button.id == "download_model":
+            if self.model_page:
+                self.download_model(self.model_page)
         elif event.button.id == "pause":
             self._toggle_pause(event.button)
 
@@ -131,6 +161,8 @@ class GalleryDownloaderApp(App):
         pause_button.variant = "default"
         self.query_one("#download", Button).disabled = True
         self.query_one("#download_list", Button).disabled = True
+        self.query_one("#count_model", Button).disabled = True
+        self.query_one("#download_model", Button).disabled = True
 
     def _end_run(self) -> None:
         """Tear down run state and restore the controls."""
@@ -140,8 +172,11 @@ class GalleryDownloaderApp(App):
         pause_button.variant = "default"
         self._pause_event = None
         self.query_one("#download_list", Button).disabled = False
+        self.query_one("#count_model", Button).disabled = False
         has_gallery = self.gallery is not None and self.gallery.count > 0
         self.query_one("#download", Button).disabled = not has_gallery
+        has_model = self.model_page is not None and self.model_page.count > 0
+        self.query_one("#download_model", Button).disabled = not has_model
 
     async def _download_gallery(self, gallery: Gallery) -> tuple[int, int]:
         """Download one gallery, update history, return (downloaded, failed).
@@ -197,6 +232,30 @@ class GalleryDownloaderApp(App):
             self._end_run()
         self._log(f"[green]Done.[/green] {done} downloaded, {failed} failed.")
 
+    async def _run_batch(self, urls: list[str]) -> None:
+        """Download a list of gallery URLs in sequence (assumes a run began).
+
+        Each URL is parsed off-thread and downloaded; a URL that fails to
+        parse is logged and skipped so it never aborts the batch.
+        """
+        total_done = 0
+        total_failed = 0
+        for i, url in enumerate(urls, start=1):
+            self._log(f"[b]({i}/{len(urls)})[/b] Parsing [cyan]{url}[/cyan] …")
+            try:
+                # parse_gallery does blocking I/O; keep the loop responsive.
+                gallery = await asyncio.to_thread(parse_gallery, url)
+            except Exception as exc:  # noqa: BLE001 - surface & continue
+                self._log(f"[red]Parse failed:[/red] {url} ({exc})")
+                continue
+            done, failed = await self._download_gallery(gallery)
+            total_done += done
+            total_failed += failed
+        self._log(
+            f"[green]Batch done.[/green] {total_done} downloaded, "
+            f"{total_failed} failed across {len(urls)} galleries."
+        )
+
     @work(exclusive=True)
     async def download_list(self, path: str) -> None:
         try:
@@ -210,28 +269,48 @@ class GalleryDownloaderApp(App):
         self._log(
             f"Loaded [green]{len(urls)}[/green] URL(s) from [cyan]{path}[/cyan]."
         )
-
         self._begin_run()
-        total_done = 0
-        total_failed = 0
         try:
-            for i, url in enumerate(urls, start=1):
-                self._log(f"[b]({i}/{len(urls)})[/b] Parsing [cyan]{url}[/cyan] …")
-                try:
-                    # parse_gallery does blocking I/O; keep the loop responsive.
-                    gallery = await asyncio.to_thread(parse_gallery, url)
-                except Exception as exc:  # noqa: BLE001 - surface & continue
-                    self._log(f"[red]Parse failed:[/red] {url} ({exc})")
-                    continue
-                done, failed = await self._download_gallery(gallery)
-                total_done += done
-                total_failed += failed
+            await self._run_batch(urls)
         finally:
             self._end_run()
-        self._log(
-            f"[green]Batch done.[/green] {total_done} downloaded, "
-            f"{total_failed} failed across {len(urls)} galleries."
+
+    @work(exclusive=True, thread=True)
+    def count_model(self, url: str) -> None:
+        self._log(f"Counting galleries for [cyan]{url}[/cyan] … (may take a moment)")
+
+        def on_page(total: int) -> None:
+            self.call_from_thread(self._log, f"  …found {total} so far")
+
+        try:
+            model = fetch_model_galleries(url, on_page=on_page)
+        except Exception as exc:  # noqa: BLE001 - surface any fetch failure
+            self.call_from_thread(self._log, f"[red]Count failed:[/red] {exc}")
+            return
+        self.model_page = model
+        self.call_from_thread(self._on_model_counted, model)
+
+    def _on_model_counted(self, model: ModelPage) -> None:
+        self.query_one("#meta", Label).update(
+            f"[b]{model.name}[/b] — {model.count} galleries"
         )
+        self._log(
+            f"[green]{model.name}: {model.count} galleries.[/green] "
+            "Press [b]Download All[/b] to fetch every one."
+        )
+        self.query_one("#download_model", Button).disabled = model.count == 0
+
+    @work(exclusive=True)
+    async def download_model(self, model: ModelPage) -> None:
+        self._log(
+            f"Downloading all [green]{model.count}[/green] galleries "
+            f"for [b]{model.name}[/b] …"
+        )
+        self._begin_run()
+        try:
+            await self._run_batch(model.gallery_urls)
+        finally:
+            self._end_run()
 
 
 def _safe_name(name: str) -> str:

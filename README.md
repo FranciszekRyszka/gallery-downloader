@@ -7,6 +7,8 @@ downloading all images from a gallery page on CornPics.
 - Shows metadata (title, image count) before you commit
 - Async downloads with retry, concurrency and **pause / resume**
 - **Batch mode**: download many galleries from a list file (one URL per line)
+- **Actress / model mode**: paste a model page URL to count *all* their
+  galleries, then download every one
 - Skips files already on disk (resume across restarts)
 - Keeps a SQLite history of downloaded galleries
 
@@ -56,14 +58,22 @@ python main.py
    logged and skipped — it won't abort the batch. **Pause** applies across the
    whole run.
 
+**All galleries of an actress / model:**
+
+1. Paste a model page URL (e.g. `…/cornstars/<name>/`) into the third input.
+2. Press **Count Galleries**. The app pages through the site's listing API
+   and reports the total (e.g. *"Riley Reid: 1733 galleries"*).
+3. Press **Download All** to fetch every gallery, using the same sequential
+   batch engine (progress, skip-on-parse-error, pause/resume all apply).
+
 ## Project structure
 
 ```text
 gallery_downloader/
 │── main.py            # entry point → launches the TUI
-│── app.py             # Textual app: input, preview, progress, pause, batch
+│── app.py             # Textual app: preview, download, pause, batch, model
 ├── core/
-│   ├── parser.py      # httpx fetch + BeautifulSoup → Gallery; read_url_list
+│   ├── parser.py      # parse_gallery / fetch_model_galleries / read_url_list
 │   └── downloader.py  # async downloads: concurrency, retry, resume, pause
 ├── db/
 │   └── history.py     # SQLite history & download-state persistence
@@ -88,6 +98,11 @@ gallery_downloader/
 
 Batch mode reads URLs with `core.parser.read_url_list(path)` and runs the
 same parse → download steps for each gallery in sequence.
+
+Actress / model mode uses `core.parser.fetch_model_galleries(url)`, which
+pages through the site's listing endpoint (`/search/srch.php`, the same API
+the page's infinite scroll calls) to enumerate every gallery URL, then feeds
+that list into the batch engine.
 
 ## Notes
 
