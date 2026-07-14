@@ -35,42 +35,36 @@ Run the TUI:
 python main.py
 ```
 
-**Single gallery:**
+There's a **single input box** — paste any of the three things below and press
+**Preview**. The app auto-detects what you gave it, shows what it found, and
+enables **Download**. **Pause** holds back new downloads (in-flight ones
+finish); press it again to resume. Press **q** to quit.
 
-1. Paste a gallery URL into the input box.
-2. Press **Preview** to fetch the title and image count.
-3. Press **Download** to start. Images are saved to
-   `<download folder>/<gallery title>/` (see **Options** below).
-4. Press **Pause** to hold back new downloads (in-flight ones finish);
-   press **Resume** to continue. Press **q** to quit.
+**Single gallery** — paste a gallery URL. Preview fetches the title and image
+count; Download saves to `<download folder>/<gallery title>/` (see **Options**).
 
-**Batch (multiple galleries):**
+**Batch (multiple galleries)** — paste the path to a local `.txt` file with one
+gallery URL per line. Blank lines and lines starting with `#` are ignored, and
+duplicate URLs are skipped:
 
-1. Create a text file with one gallery URL per line. Blank lines and lines
-   starting with `#` are ignored, and duplicate URLs are skipped:
+```text
+# my-list.txt
+https://www.cornpics.com/galleries/example-one/
+https://www.cornpics.com/galleries/example-two/
+```
 
-   ```text
-   # my-list.txt
-   https://www.cornpics.com/galleries/example-one/
-   https://www.cornpics.com/galleries/example-two/
-   ```
+Preview reports how many URLs it loaded; Download parses and downloads each in
+turn with `(i/N)` progress and a final summary. A URL that fails to parse is
+logged and skipped — it won't abort the batch.
 
-2. Enter the path to that file in the second input box.
-3. Press **Download List**. Each gallery is parsed and downloaded in turn,
-   with `(i/N)` progress and a final summary. A URL that fails to parse is
-   logged and skipped — it won't abort the batch. **Pause** applies across the
-   whole run.
+**All galleries of an actress / model** — paste a model page URL (e.g.
+`…/cornstars/<name>/`). Preview pages through the site's listing API and
+reports the total (e.g. *"Riley Reid — 1733 galleries"*); Download fetches them
+all into `<download folder>/<model name>/<gallery title>/`. Set a **First N**
+cap in Options first if you don't want the whole set.
 
-**All galleries of an actress / model:**
-
-1. Paste a model page URL (e.g. `…/cornstars/<name>/`) into the third input.
-2. Press **Count Galleries**. The app pages through the site's listing API
-   and reports the total (e.g. *"Riley Reid: 1733 galleries"*).
-3. Press **Download All** to fetch every gallery, using the same sequential
-   batch engine (progress, skip-on-parse-error, pause/resume all apply). The
-   galleries are saved into `<download folder>/<model name>/<gallery title>/`.
-
-**Options** (apply to whichever download you start):
+**Options** (in the collapsible *Options* section; apply to whichever download
+you start):
 
 - **Download folder** — where files are saved. Single galleries and lists go
   into `<folder>/<gallery title>/`; model downloads add a `<model name>/`
