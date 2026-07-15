@@ -24,9 +24,14 @@ downloading all images from a gallery page on CornPics.
 ## Run it (no install)
 
 If you just want to use the app, grab **`GalleryDownloader.exe`** and
-double-click it — no Python, no terminal commands, no setup. A console window
-opens with the TUI inside. Downloaded galleries and the history database are
-saved in `downloads/` and `logs/` folders next to the `.exe`.
+double-click it — no Python, no terminal commands, no setup. The TUI opens in
+a terminal window. Downloaded galleries and the history database are saved in
+`downloads/` and `logs/` folders next to the `.exe`.
+
+For the best-looking output the app opens itself in **Windows Terminal** when
+it's available (it renders Textual's colours and borders far better than the
+old console). To disable that and stay in the plain console, set the
+environment variable `GDL_NO_RELAUNCH=1`.
 
 Build the executable yourself with:
 
