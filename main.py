@@ -72,6 +72,60 @@ def _configure_windows_console() -> None:
             kernel32.SetConsoleMode(handle, mode.value | enable_vt)
     except OSError:
         pass
+    _use_truetype_console_font()
+
+
+def _use_truetype_console_font() -> None:
+    """Switch the legacy console to a TrueType font (Consolas).
+
+    Textual pads button labels with non-breaking spaces (U+00A0). The classic
+    console's default *raster* font has no glyph for it, so it renders as a box
+    or ``?`` around every button. A TrueType font renders it as a normal blank.
+    Harmless / ignored in Windows Terminal.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    lf_facesize = 32
+    std_output_handle = -11
+
+    class _COORD(ctypes.Structure):
+        _fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
+
+    class _CONSOLE_FONT_INFOEX(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_ulong),
+            ("nFont", ctypes.c_ulong),
+            ("dwFontSize", _COORD),
+            ("FontFamily", ctypes.c_uint),
+            ("FontWeight", ctypes.c_uint),
+            ("FaceName", ctypes.c_wchar * lf_facesize),
+        ]
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetStdHandle.restype = wintypes.HANDLE
+        kernel32.GetStdHandle.argtypes = [wintypes.DWORD]
+        proto = [
+            wintypes.HANDLE,
+            wintypes.BOOL,
+            ctypes.POINTER(_CONSOLE_FONT_INFOEX),
+        ]
+        kernel32.GetCurrentConsoleFontEx.argtypes = proto
+        kernel32.SetCurrentConsoleFontEx.argtypes = proto
+
+        handle = kernel32.GetStdHandle(std_output_handle)
+        font = _CONSOLE_FONT_INFOEX()
+        font.cbSize = ctypes.sizeof(_CONSOLE_FONT_INFOEX)
+        kernel32.GetCurrentConsoleFontEx(handle, False, ctypes.byref(font))
+        font.FaceName = "Consolas"
+        font.FontFamily = 54  # FF_MODERN | TMPF_TRUETYPE | TMPF_VECTOR
+        font.FontWeight = 400
+        if font.dwFontSize.Y <= 0:
+            font.dwFontSize = _COORD(0, 16)
+        kernel32.SetCurrentConsoleFontEx(handle, False, ctypes.byref(font))
+    except (OSError, AttributeError, ValueError):
+        pass
 
 
 def main() -> None:
