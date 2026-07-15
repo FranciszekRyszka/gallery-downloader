@@ -2,7 +2,7 @@
 .claude/settings.local.json
 
 # Crash / debug logs
-error.txt
+error*.txt
 
 # Python
 __pycache__/

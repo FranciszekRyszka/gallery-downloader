@@ -20,6 +20,12 @@ for _pkg in ("textual",):
     binaries += _b
     hiddenimports += _h
 
+# `sqlite3` (used by db/history.py) loads the `_sqlite3` C-extension, which
+# PyInstaller's static analysis can miss — leaving the app to crash on launch
+# with "No module named '_sqlite3'". Naming it explicitly pulls in the .pyd
+# and, via its link dependency, the sqlite3.dll it needs.
+hiddenimports += ["_sqlite3"]
+
 a = Analysis(
     ["main.py"],
     pathex=[],
