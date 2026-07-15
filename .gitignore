@@ -10,6 +10,10 @@ __pycache__/
 .venv/
 venv/
 
+# PyInstaller build output (the .spec is tracked; build/ and dist/ are not)
+build/
+dist/
+
 # Project runtime data (keep the folders, ignore their contents)
 logs/*
 downloads/*

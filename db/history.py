@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "logs" / "history.db"
+from paths import LOGS_DIR
+
+DEFAULT_DB_PATH = LOGS_DIR / "history.db"
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS galleries (

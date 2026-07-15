@@ -21,17 +21,27 @@ downloading all images from a gallery page on CornPics.
 - Dependencies in [`requirements.txt`](requirements.txt): `textual`,
   `beautifulsoup4`, `httpx`
 
-## Install
+## Run it (no install)
+
+If you just want to use the app, grab **`GalleryDownloader.exe`** and
+double-click it — no Python, no terminal commands, no setup. A console window
+opens with the TUI inside. Downloaded galleries and the history database are
+saved in `downloads/` and `logs/` folders next to the `.exe`.
+
+Build the executable yourself with:
+
+```powershell
+./build.ps1
+```
+
+which produces `dist/GalleryDownloader.exe`. (It installs PyInstaller and the
+runtime dependencies, then bundles everything into one file — see
+[`GalleryDownloader.spec`](GalleryDownloader.spec).)
+
+## Run from source
 
 ```bash
 pip install -r requirements.txt
-```
-
-## Usage
-
-Run the TUI:
-
-```bash
 python main.py
 ```
 
@@ -79,16 +89,19 @@ you start):
 
 ```text
 gallery_downloader/
-│── main.py            # entry point → launches the TUI
-│── app.py             # Textual app: preview, download, pause, batch, model
+│── main.py                  # entry point → launches the TUI
+│── app.py                   # Textual app: preview, download, pause, batch, model
+│── paths.py                 # data locations (source vs. frozen .exe)
+│── build.ps1                # one-command Windows build script
+│── GalleryDownloader.spec   # PyInstaller build config
 ├── core/
-│   ├── parser.py      # parse_gallery / fetch_model_galleries / read_url_list
-│   └── downloader.py  # async downloads: concurrency, retry, resume, pause
+│   ├── parser.py            # parse_gallery / fetch_model_galleries / read_url_list
+│   └── downloader.py        # async downloads: concurrency, retry, resume, pause
 ├── db/
-│   └── history.py     # SQLite history & download-state persistence
-├── tui/               # (reserved for additional TUI components)
-├── logs/              # history.db lives here at runtime
-└── downloads/         # downloaded images (one folder per gallery)
+│   └── history.py           # SQLite history & download-state persistence
+├── tui/                     # (reserved for additional TUI components)
+├── logs/                    # history.db lives here at runtime
+└── downloads/               # downloaded images (one folder per gallery)
 ```
 
 ## How it works

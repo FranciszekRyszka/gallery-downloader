@@ -29,8 +29,7 @@ from core.parser import (
     read_url_list,
 )
 from db.history import History
-
-DOWNLOADS_DIR = Path(__file__).resolve().parent / "downloads"
+from paths import DOWNLOADS_DIR
 
 
 class GalleryDownloaderApp(App):
